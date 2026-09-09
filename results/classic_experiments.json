@@ -1,0 +1,85 @@
+{
+  "hough_tiled": {
+    "precision": 0.44316730523627074,
+    "recall": 0.10442371351188685,
+    "f1": 0.16902094495859718,
+    "mean_iou_matched": 0.7691683642108009,
+    "tp": 347,
+    "fp": 436,
+    "fn": 2976,
+    "mean_inference_time_s": 0.17486715000086406,
+    "best_config": {
+      "dp": 1.0,
+      "param1": 180,
+      "param2": 50,
+      "min_dist_factor": 1.0
+    }
+  },
+  "blob_detector": {
+    "precision": 0.32255914695101634,
+    "recall": 0.29130303942220886,
+    "f1": 0.30613535736875397,
+    "mean_iou_matched": 0.6705733569219844,
+    "tp": 968,
+    "fp": 2033,
+    "fn": 2355,
+    "mean_inference_time_s": 0.43902213999972445,
+    "best_config": {
+      "min_area": 30,
+      "max_area": 3000,
+      "min_circularity": 0.75,
+      "min_convexity": 0.8,
+      "blob_color": 255
+    }
+  },
+  "contour_circularity": {
+    "precision": 0.1440677966101695,
+    "recall": 0.10743304243153777,
+    "f1": 0.12308222720220652,
+    "mean_iou_matched": 0.742654412410099,
+    "tp": 357,
+    "fp": 2121,
+    "fn": 2966,
+    "mean_inference_time_s": 0.19294387999980245,
+    "best_config": {
+      "block_size": 15,
+      "c_offset": 6,
+      "min_area": 30,
+      "max_area": 3000,
+      "min_circularity": 0.65
+    }
+  },
+  "watershed_universal": {
+    "precision": 0.28662420382165604,
+    "recall": 0.21667168221486607,
+    "f1": 0.2467866323907455,
+    "mean_iou_matched": 0.6574603762625066,
+    "tp": 720,
+    "fp": 1792,
+    "fn": 2603,
+    "mean_inference_time_s": 0.7942410050003673,
+    "best_config": {
+      "brightness_percentile": 95,
+      "min_distance": 8,
+      "min_area": 50,
+      "max_area": 3000,
+      "min_circularity": 0.9
+    }
+  },
+  "dog_blob": {
+    "precision": 0.030648610121168925,
+    "recall": 0.05176045741799579,
+    "f1": 0.03850027979854505,
+    "mean_iou_matched": 0.5654731975883628,
+    "tp": 172,
+    "fp": 5440,
+    "fn": 3151,
+    "mean_inference_time_s": 3.36251204999935,
+    "best_config": {
+      "min_sigma": 2.5,
+      "max_sigma": 15,
+      "sigma_ratio": 2.2,
+      "threshold": 0.2
+    }
+  }
+}

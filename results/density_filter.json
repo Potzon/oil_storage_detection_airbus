@@ -1,0 +1,32 @@
+{
+  "no_filter": {
+    "precision": 0.5840830449826989,
+    "recall": 0.25398736081853746,
+    "f1": 0.35402684563758385,
+    "mean_iou_matched": 0.6716369436724935,
+    "tp": 844,
+    "fp": 601,
+    "fn": 2479
+  },
+  "with_filter": {
+    "precision": 0.6261398176291794,
+    "recall": 0.24796870297923562,
+    "f1": 0.35524897607242945,
+    "mean_iou_matched": 0.6711908659083021,
+    "tp": 824,
+    "fp": 492,
+    "fn": 2499,
+    "mean_inference_time_s": 0.42754953499897963,
+    "best_filter_config": {
+      "radius": 300,
+      "min_neighbors": 2
+    },
+    "blob_config": {
+      "min_area": 40,
+      "max_area": 3000,
+      "min_circularity": 0.8,
+      "min_convexity": 0.75,
+      "blob_color": 255
+    }
+  }
+}

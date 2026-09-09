@@ -1,0 +1,17 @@
+{
+  "precision": 0.5840830449826989,
+  "recall": 0.25398736081853746,
+  "f1": 0.35402684563758385,
+  "mean_iou_matched": 0.6716369436724935,
+  "tp": 844,
+  "fp": 601,
+  "fn": 2479,
+  "mean_inference_time_s": 0.42890611000038914,
+  "best_config": {
+    "min_area": 40,
+    "max_area": 3000,
+    "min_circularity": 0.8,
+    "min_convexity": 0.75,
+    "blob_color": 255
+  }
+}

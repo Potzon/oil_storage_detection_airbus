@@ -1,0 +1,6 @@
+names:
+  0: oil-storage-tank
+path: "C:\\Users\\dekum\\OneDrive\\Escritorio\\Trabajo\\5\xBA\\Vision\\Proyecto Vision\
+  \ 2\\yolo_dataset"
+train: images/train
+val: images/val

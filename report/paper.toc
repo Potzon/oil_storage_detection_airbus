@@ -1,0 +1,19 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {section}{\numberline {1}Introducción y Objetivo General}{2}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Definición del problema}{2}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Estado del arte y trabajos relacionados}{2}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Valor añadido del proyecto}{3}{subsection.1.3}%
+\contentsline {section}{\numberline {2}Metodología y Desarrollo}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Conjunto de datos}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Arquitectura del proyecto}{4}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Protocolo de evaluación común}{4}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Técnicas deterministas evaluadas}{5}{subsection.2.4}%
+\contentsline {subsection}{\numberline {2.5}Modelo de referencia: YOLOv8}{6}{subsection.2.5}%
+\contentsline {section}{\numberline {3}Resultados y Conclusiones}{6}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Tabla comparativa (20 imágenes de validación)}{6}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Análisis de los fallos del sistema determinista}{6}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Un fallo de diseño real, encontrado y corregido durante el desarrollo}{7}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Validación externa del resultado con YOLO}{7}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Ejemplo visual}{7}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}Líneas de mejora futuras}{8}{subsection.3.6}%
+\contentsline {section}{Anexo: reproducibilidad}{9}{section*.5}%

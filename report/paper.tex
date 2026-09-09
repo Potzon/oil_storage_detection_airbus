@@ -1,0 +1,558 @@
+\documentclass[11pt,a4paper]{article}
+
+% ---------------------------------------------------------------------------
+% Paquetes
+% ---------------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage[a4paper,margin=2.5cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!50!black,
+    urlcolor=blue!50!black,
+    citecolor=blue!50!black,
+    pdftitle={Detección de tanques de almacenamiento de petróleo: métodos deterministas de OpenCV frente a una CNN},
+    pdfauthor={},
+}
+
+\graphicspath{{results/figures/}}
+
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Fundamentos de la Visión por Computador}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+
+% ---------------------------------------------------------------------------
+% Datos del documento
+% ---------------------------------------------------------------------------
+\title{
+    \textbf{Fundamentos de la Visión por Computador} \\[0.5em]
+    \large Detección de tanques de almacenamiento de petróleo en imágenes satelitales:\\
+    métodos deterministas de OpenCV frente a una CNN (YOLOv8)
+}
+\author{Gotzon Viteri Fuente}
+\date{\today}
+
+% ---------------------------------------------------------------------------
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Introducción y Objetivo General}
+% =============================================================================
+
+\subsection{Definición del problema}
+
+El problema abordado es la \textbf{detección de tanques de almacenamiento de
+petróleo} en imágenes de satélite de alta resolución. Dada una imagen aérea de una
+instalación industrial o portuaria, el sistema debe localizar cada tanque presente
+mediante una caja delimitadora (\emph{bounding box}), sin necesidad de clasificar
+subtipos de tanque ni estimar su volumen.
+
+Los tanques de almacenamiento son estructuras cilíndricas que, vistas desde arriba,
+aparecen como \textbf{círculos o elipses casi perfectos}, de tamaño relativamente
+uniforme dentro de una misma instalación pero muy variable entre instalaciones
+distintas (de pocos metros a más de 100 m de diámetro). Se agrupan característicamente
+en ``granjas de tanques'' --- filas y rejillas muy densas de decenas o cientos de
+unidades --- lo que convierte la \textbf{separación de instancias contiguas} en el
+principal reto técnico del problema, por encima de la propia detección de la forma
+circular.
+
+Este tipo de detección tiene aplicaciones reales en inteligencia geoespacial:
+estimación de reservas estratégicas de petróleo a partir de la sombra proyectada por
+el techo flotante de los tanques, monitorización de actividad industrial, o
+vigilancia de infraestructuras críticas --- todas ellas tareas que hoy dependen de
+imagen satelital comercial y que motivaron a Airbus Defense and Space a publicar el
+dataset utilizado en este proyecto.
+
+\subsection{Estado del arte y trabajos relacionados}
+
+Se han identificado y consultado las siguientes referencias directamente relacionadas
+con este problema y, en varios casos, con este mismo dataset:
+
+\begin{enumerate}
+    \item \textbf{Hough Circle Transform} \cite{duda1972hough} --- la técnica clásica
+    de referencia para detectar formas circulares mediante acumulación de votos en un
+    espacio de parámetros (centro, radio), implementada en OpenCV como
+    \texttt{cv2.HoughCircles}. Es el punto de partida natural para cualquier detector
+    de objetos circulares, pero \textbf{no discrimina textura de fondo}: en escenas
+    con muchos bordes (carreteras, parcelas agrícolas) genera un número inmanejable de
+    falsos círculos si se ajusta para ser sensible a objetos pequeños.
+
+    \item \textbf{Faudi, J.} --- \emph{``Oil Storage Detection on Airbus Imagery with
+    YOLOX''} \cite{faudi_yolox}, curador del propio dataset. Trocea las imágenes de
+    2560$\times$2560 en \emph{tiles} de 640$\times$640 con solape de 64 px (protocolo
+    que hemos replicado en este proyecto) y entrena YOLOX-s durante solo 10 épocas,
+    obteniendo AP@0.5 = 0.856. \emph{Limitación}: no compara contra ningún método
+    clásico ni analiza en qué tipo de escena falla el modelo.
+
+    \item \textbf{Ouzounis, G.} --- \emph{``Oil-Storage Tank Instance Segmentation
+    with Mask R-CNN''} \cite{ouzounis_maskrcnn}. Convierte las cajas del mismo dataset
+    en máscaras circulares sintéticas y entrena Mask R-CNN sobre recortes de
+    128$\times$128. Reporta cualitativamente el mismo problema estructural que hemos
+    encontrado nosotros: ``leakage'' (fuga) al separar tanques contiguos por falta de
+    contexto en recortes pequeños. \emph{Limitación}: no aporta métricas cuantitativas
+    de detección, solo observaciones cualitativas.
+
+    \item \textbf{Wang et al.} --- \emph{``Storage tank detection in remote sensing
+    images based on circular bounding boxes and large selective kernel''}
+    \cite{wang2025circular}, Scientific Reports (2025). Propone sustituir la caja
+    rectangular estándar de un detector tipo YOLO por una parametrización circular
+    explícita (centro + radio) y un kernel selectivo de campo receptivo amplio,
+    alineando mejor la representación del modelo con la forma real del objeto. Es la
+    línea de mejora más prometedora que hemos identificado para superar el techo de
+    F1$\approx$0.84 obtenido con una caja rectangular genérica, aunque no hemos podido
+    confirmar si sus experimentos usan este mismo dataset (artículo con acceso
+    restringido).
+
+    \item \textbf{Beucher, S. \& Meyer, F.} --- algoritmo de segmentación
+    \emph{watershed} controlado por marcadores \cite{beucher1993watershed} (técnica
+    clásica de procesamiento morfológico, disponible en \texttt{cv2.watershed}), el
+    método de referencia en visión por computador clásica para separar objetos
+    convexos que se tocan (su aplicación más citada es la separación de células en
+    microscopía). Es la base de uno de los experimentos deterministas de este
+    proyecto.
+\end{enumerate}
+
+\textbf{Ningún trabajo consultado reporta un \emph{baseline} puramente determinista}
+(sin aprendizaje) para este dataset con el que comparar cuantitativamente. Esa
+ausencia es precisamente el hueco que este proyecto cubre.
+
+\subsection{Valor añadido del proyecto}
+
+Frente a los antecedentes anteriores, este proyecto no se limita a entrenar un
+detector más: aporta
+
+\begin{itemize}
+    \item Un \textbf{barrido sistemático de 7 técnicas deterministas} de complejidad
+    creciente (Hough circular, Hough tileado, contornos + circularidad, \emph{blob
+    detection}, segmentación \emph{watershed} controlada por marcadores, detección
+    multiescala Diferencia-de-Gaussianas) más un post-proceso de filtrado por
+    densidad --- todas evaluadas bajo el \textbf{mismo protocolo exacto} (mismo
+    \emph{split}, mismo umbral de IoU, mismo código de métricas) que el modelo de
+    referencia basado en CNN, algo que ninguna de las referencias anteriores ofrece.
+
+    \item Una \textbf{cuantificación del techo real del enfoque clásico} en este
+    problema concreto (F1$\approx$0.354, frente a F1$\approx$0.843 de una CNN
+    \emph{fine-tuned}) y, más importante, un \textbf{diagnóstico de \emph{por qué}}
+    se produce ese techo: no es un problema de ajuste de hiperparámetros (se han
+    probado más de 150 configuraciones distintas en total) sino una limitación
+    estructural --- los detectores de forma clásicos razonan objeto a objeto a partir
+    de bordes o umbrales locales, y el 50\,\% de las imágenes del dataset contienen
+    más de 100 tanques colocados en rejillas muy densas, el escenario exacto en el
+    que separar instancias contiguas sin contexto de alto nivel es más difícil.
+
+    \item La confirmación (Sección~\ref{sec:validacion}) de que nuestro resultado con
+    YOLOv8 es coherente con el resultado publicado por el propio curador del dataset
+    usando YOLOX y un protocolo de \emph{tiling} casi idéntico, lo que valida la
+    metodología de evaluación seguida.
+\end{itemize}
+
+% =============================================================================
+\section{Metodología y Desarrollo}
+% =============================================================================
+
+\subsection{Conjunto de datos}
+
+Se ha utilizado el dataset \textbf{Airbus Oil Storage Detection}
+\cite{airbus_dataset} (Airbus DS Intelligence / Scale AI), publicado bajo licencia
+Creative Commons BY-NC-SA 4.0.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Propiedad} & \textbf{Valor} \\
+\midrule
+Nº de imágenes & 98 (+ 5 adicionales sin anotar en \texttt{extras/}) \\
+Resolución de imagen & 2560 $\times$ 2560 px \\
+Resolución de suelo & $\sim$1.2--1.5 m/píxel (satélite SPOT) \\
+Condiciones de adquisición & Óptico, luz natural diurna, ubicaciones \\
+ & mundiales diversas (iluminación/sombra variable), \\
+ & imagen fija ortorectificada (sin movimiento) \\
+Nº total de anotaciones & 13\,592 cajas, clase única \texttt{oil-storage-tank} \\
+Tanques por imagen & mín. 14, mediana 99.5, máx. 893 \\
+Tamaño de tanque (lado de caja) & mín. 3 px, mediana 18 px, máx. 108 px \\
+\bottomrule
+\end{tabular}
+\caption{Características del dataset Airbus Oil Storage Detection.}
+\label{tab:dataset}
+\end{table}
+
+\textbf{Limpieza de datos}: se detectó que algunas anotaciones del CSV tienen
+$y_2 < y_1$ (altura negativa, p.\ ej.\ una fila con $h = -77$), por lo que el
+\emph{parser} de anotaciones normaliza cada caja tomando
+$(\min(x_1,x_2), \min(y_1,y_2), \max(x_1,x_2), \max(y_1,y_2))$ en vez de asumir que
+las coordenadas ya vienen ordenadas.
+
+\textbf{Partición}: \emph{split} fijo del 80/20 a nivel de imagen completa (no de
+anotación individual, para evitar fuga de información entre \emph{train} y
+\emph{val}), con semilla aleatoria fija (42), generando 78 imágenes de
+entrenamiento/ajuste y 20 de validación. El mismo \emph{split} se reutiliza para
+\textbf{todos} los métodos comparados, de forma que los números de la
+Sección~\ref{sec:resultados} son directamente comparables entre sí.
+
+\subsection{Arquitectura del proyecto}
+
+El proyecto se organiza en módulos reutilizables (\texttt{src/}) y \emph{scripts}
+ejecutables (\texttt{scripts/}):
+
+\begin{itemize}[leftmargin=2.2cm]
+    \item[\texttt{src/dataset.py}] carga/parseo de anotaciones, \emph{split}
+    train/val, lectura/escritura de imagen segura en Windows.
+    \item[\texttt{src/evaluate.py}] IoU, \emph{matching} \emph{greedy}, métricas
+    P/R/F1, NMS genérico.
+    \item[\texttt{src/tiling.py}] partición de una imagen grande en \emph{tiles} con
+    solape.
+    \item[\texttt{src/hough\_detector.py}] Hough Circles sobre imagen completa +
+    \emph{grid search}.
+    \item[\texttt{src/classic\_methods.py}] 7 variantes deterministas adicionales,
+    todas tileadas.
+    \item[\texttt{src/yolo\_data.py}] conversión del dataset a formato YOLO (tiling +
+    etiquetas).
+    \item[\texttt{src/yolo\_detector.py}] entrenamiento e inferencia tileada de
+    YOLOv8.
+    \item[\texttt{src/visualize.py}] superposición de cajas GT/predicción sobre la
+    imagen.
+\end{itemize}
+
+Los \emph{scripts} de \texttt{scripts/} orquestan el ajuste de hiperparámetros
+(\emph{grid search}), la evaluación sobre validación y la generación de tablas y
+figuras comparativas para cada método.
+
+\textbf{Librerías utilizadas}: OpenCV (\texttt{opencv-python}) para todo el
+procesamiento de imagen de bajo/medio nivel (filtrado, umbralización, transformada de
+Hough, \texttt{SimpleBlobDetector}, morfología, \emph{watershed}), NumPy para álgebra
+vectorizada (IoU, NMS), pandas para el parseo de anotaciones, \texttt{scikit-image}
+\cite{vanderwalt2014scikit} para detección de \emph{blobs} multiescala y
+\texttt{peak\_local\_max}/\texttt{regionprops}, SciPy para el etiquetado de
+componentes conexas, \texttt{ultralytics} (YOLOv8 \cite{yolov8}, sobre PyTorch con
+aceleración CUDA) como referencia de red neuronal, y matplotlib/OpenCV
+\cite{bradski2000opencv} para las visualizaciones.
+
+\subsection{Protocolo de evaluación común}
+
+Para que la comparación entre técnicas tan distintas sea honesta, todas comparten:
+
+\begin{itemize}
+    \item \textbf{Emparejamiento \emph{greedy} por IoU}: cada predicción se empareja,
+    por orden de confianza (o de llegada si el detector no aporta confianza, como los
+    métodos clásicos), con la anotación real no usada de mayor solapamiento,
+    aceptando el emparejamiento solo si $\text{IoU} \geq 0.5$.
+    \item \textbf{Métricas}: precisión, \emph{recall}, F1 (métrica principal para
+    elegir hiperparámetros), IoU medio de los aciertos (mide \emph{calidad de
+    localización} independientemente de cuántos aciertos haya) y tiempo de
+    inferencia por imagen.
+    \item \textbf{Ajuste de hiperparámetros exclusivamente sobre \emph{train}}: cada
+    método se afina por \emph{grid search} maximizando F1 sobre una muestra de
+    entrenamiento (8--12 imágenes según el experimento) y la configuración ganadora
+    se congela antes de evaluarse, una única vez, sobre las 20 imágenes de
+    validación.
+    \item \textbf{NMS genérico} para fusionar detecciones solapadas entre
+    \emph{tiles} contiguos.
+\end{itemize}
+
+\subsection{Técnicas deterministas evaluadas}
+
+Todas operan por \textbf{teselado (\emph{tiling})} de la imagen en ventanas de
+640$\times$640 px con 64 px de solape (salvo el primer experimento, que se hace sobre
+la imagen completa como punto de partida), replicando la misma estrategia de
+partición usada para YOLO, de forma que la comparación no esté sesgada por trabajar a
+distinta escala espacial.
+
+\begin{enumerate}
+    \item \textbf{Hough Circles, imagen completa} --- \texttt{cv2.HoughCircles} sobre
+    la imagen de 2560$\times$2560 tras realce con CLAHE y filtro de mediana.
+    \emph{Grid search} sobre \texttt{dp}, \texttt{param1}, \texttt{param2},
+    \texttt{minDist}.
+    \item \textbf{Hough Circles, tileado} --- la misma transformada, pero corrida
+    ventana a ventana y fusionando resultados con NMS.
+    \item \textbf{Contornos + circularidad + \emph{watershed} local} --- umbral
+    adaptativo, contornos filtrados por circularidad
+    ($4\pi\,\text{Área}/\text{Perímetro}^2$), con separación por \emph{watershed}
+    solo cuando un contorno es sospechosamente grande (probable fusión de varios
+    tanques).
+    \item \textbf{\texttt{cv2.SimpleBlobDetector}} --- detector de \emph{blobs}
+    nativo de OpenCV, configurado para buscar regiones estables a través de
+    múltiples umbrales de brillo, filtrando por área, circularidad, convexidad y
+    polaridad de color (\emph{blobs} claros vs.\ oscuros).
+    \item \textbf{Segmentación \emph{watershed} universal controlada por
+    marcadores} --- umbral global por percentil de brillo, \emph{distance
+    transform}, máximos locales como semillas de primer plano, fondo seguro por
+    dilatación, y \texttt{cv2.watershed} sobre toda la máscara (no solo sobre
+    \emph{blobs} sospechosos, a diferencia de la técnica 3).
+    \item \textbf{Detección multiescala Diferencia-de-Gaussianas (DoG)} ---
+    \texttt{skimage.feature.blob\_dog} \cite{lindeberg1998scale}, que barre un rango
+    continuo de escalas ($\sigma$) en vez de trabajar a escala fija.
+    \item \textbf{Post-proceso: filtro por densidad de vecinos} --- aplicado sobre
+    el mejor detector (técnica 4), descarta detecciones sin ningún otro candidato
+    cercano, bajo la hipótesis de que los tanques reales aparecen casi siempre en
+    grupo.
+\end{enumerate}
+
+El detalle experimento a experimento --- incluyendo un bug real de diseño detectado
+y corregido durante el desarrollo (Sección~\ref{sec:bug}) --- está documentado
+íntegramente en el fichero \texttt{EXPERIMENTS.md} que acompaña al código fuente.
+
+\subsection{Modelo de referencia: YOLOv8}
+
+Como referencia de lo que consigue un enfoque de aprendizaje profundo con el mismo
+volumen de datos, se entrenó \textbf{YOLOv8n} (variante más pequeña de Ultralytics,
+preentrenada en COCO) mediante \emph{fine-tuning}:
+
+\begin{itemize}
+    \item Las imágenes de entrenamiento se trocean en \emph{tiles} de
+    640$\times$640 px con 64 px de solape (mismo esquema que los métodos
+    clásicos), conservando solo los \emph{tiles} con al menos un tanque, y
+    descartando cajas con menos del 40\,\% de su área dentro del \emph{tile}.
+    \item Entrenamiento: 60 épocas, tamaño de imagen 640, sobre GPU NVIDIA RTX
+    3060 (CUDA).
+    \item Inferencia sobre las imágenes de validación: se aplica el mismo
+    teselado, se corre el modelo \emph{tile} a \emph{tile} y se fusionan las
+    detecciones con NMS, reproyectando a las coordenadas de la imagen original de
+    2560$\times$2560 --- el mismo procedimiento, con el mismo código de teselado,
+    que usan los métodos clásicos.
+\end{itemize}
+
+% =============================================================================
+\section{Resultados y Conclusiones}
+\label{sec:resultados}
+% =============================================================================
+
+\subsection{Tabla comparativa (20 imágenes de validación)}
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\textbf{Método} & \textbf{Precisión} & \textbf{Recall} & \textbf{F1} & \textbf{IoU medio} & \textbf{Tiempo/img} \\
+\midrule
+Hough Circles, imagen completa & 0.113 & 0.044 & 0.063 & 0.814 & 0.073 s \\
+DoG multiescala & 0.031 & 0.052 & 0.039 & 0.565 & 3.363 s \\
+Contornos + circularidad + \emph{watershed} local & 0.144 & 0.107 & 0.123 & 0.743 & 0.193 s \\
+Hough Circles, tileado & 0.443 & 0.104 & 0.169 & 0.769 & 0.175 s \\
+\emph{Watershed} universal & 0.287 & 0.217 & 0.247 & 0.657 & 0.794 s \\
+\emph{Blob detector} (grid inicial) & 0.323 & 0.291 & 0.306 & 0.671 & 0.439 s \\
+\textbf{\emph{Blob detector} (grid refinado)} & \textbf{0.584} & 0.254 & \textbf{0.354} & 0.672 & 0.429 s \\
+\emph{Blob detector} + filtro de densidad & 0.626 & 0.248 & 0.355 & 0.671 & 0.428 s \\
+\textbf{YOLOv8n \emph{fine-tuned}} & \textbf{0.812} & \textbf{0.876} & \textbf{0.843} & \textbf{0.809} & 0.373 s \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de todos los métodos evaluados bajo el mismo protocolo, sobre las 20 imágenes de validación.}
+\label{tab:resultados}
+\end{table}
+
+El mejor método determinista (\emph{blob detector} afinado, con o sin filtro de
+densidad) multiplica por \textbf{$\sim$5.6$\times$} el F1 del primer intento con
+Hough, pero se queda a \textbf{menos de la mitad} del F1 conseguido con YOLOv8.
+
+\subsection{Análisis de los fallos del sistema determinista}
+
+El hallazgo transversal a los ocho experimentos es que \textbf{el cuello de botella
+no es de precisión geométrica sino de \emph{recall}/detección}: el IoU medio de los
+aciertos es comparable entre casi todos los métodos (0.56--0.81) e incluso similar al
+de YOLO (0.81). Es decir, cuando un método clásico sí encuentra un tanque, dibuja una
+caja tan buena como la de la red neuronal. El problema es que \textbf{no encuentra la
+mayoría de ellos}: incluso el mejor método clásico solo recupera el 25\,\% de los
+tanques reales, frente al 88\,\% de YOLO.
+
+La causa raíz identificada es estructural: los detectores de forma clásicos (Hough,
+contornos, \emph{blobs}, \emph{watershed}) razonan \textbf{un objeto a la vez} a
+partir de bordes o umbrales locales. Este dataset tiene una mediana de $\sim$100
+tanques por imagen colocados en rejillas muy juntas (hasta 893 en la imagen más
+densa), y separar instancias que se tocan sin contexto de más alto nivel --- el tipo
+de contexto que una CNN aprende directamente de ejemplos anotados --- es precisamente
+el escenario donde estas técnicas fallan.
+
+Un segundo patrón, más práctico, es que \textbf{la elección de técnica importa más
+que su ajuste fino}: pasar de Hough a \emph{blob detection} (mismo \emph{tiling},
+mismo protocolo) duplicó el F1 sin cambiar nada más, simplemente porque el
+\texttt{SimpleBlobDetector} incorpora de forma nativa un filtro de \textbf{polaridad
+de brillo} (\emph{blobs} claros sobre fondo oscuro) que Hough y DoG no tienen. Los
+tanques son, ante todo, los objetos más claros y compactos de la escena; cualquier
+técnica que ignore esa señal no supera F1$\approx$0.17.
+
+\subsection{Un fallo de diseño real, encontrado y corregido durante el desarrollo}
+\label{sec:bug}
+
+Durante el experimento de \emph{watershed} universal, la primera implementación
+devolvía sistemáticamente F1 = 0.000. El diagnóstico reveló que \textbf{nunca se
+marcaba explícitamente el fondo} antes de llamar a \texttt{cv2.watershed}: se dejaban
+esos píxeles con valor 0 (``desconocido'') en vez de asignarles una etiqueta de fondo
+seguro. Sin esa semilla, el algoritmo no tiene desde dónde crecer la región de fondo,
+y el 99.97\,\% de las regiones resultantes quedaban reducidas a fragmentos de 1
+píxel. La corrección aplicó la receta estándar de \emph{watershed} controlado por
+marcadores (fondo seguro por dilatación + frente seguro por los máximos locales +
+región desconocida entre ambos), tras lo cual el método pasó a producir resultados
+razonables (F1 = 0.247). Se documenta este episodio porque ilustra un error
+conceptual no trivial --- y su corrección --- más que un simple problema de
+hiperparámetros.
+
+De forma similar, el experimento de DoG resultó ser el peor de todos (F1 = 0.039,
+incluso por debajo del Hough más ingenuo) precisamente por \emph{no} incorporar el
+filtro de polaridad de brillo que sí tiene el \emph{blob detector} --- confirmando
+\emph{post-hoc} la importancia de esa señal.
+
+Por último, el filtro de densidad de vecinos, aplicado como post-proceso sobre el
+mejor método, no aportó mejora neta (F1 0.354 $\to$ 0.355): aunque los tanques
+reales sí aparecen en grupo, \textbf{los falsos positivos también} (otras
+estructuras humanas agrupadas, como naves industriales), así que la densidad
+espacial por sí sola no distingue ``cluster de tanques'' de ``cluster de tejados
+similares''.
+
+\subsection{Validación externa del resultado con YOLO}
+\label{sec:validacion}
+
+El resultado obtenido con YOLOv8n (F1 = 0.843) es consistente con el publicado por
+el propio curador del dataset \cite{faudi_yolox}, que con YOLOX-s y un esquema de
+\emph{tiling} prácticamente idéntico (640$\times$640, solape de 64 px) obtiene
+AP@0.5 = 0.856 tras solo 10 épocas sin ajuste de hiperparámetros. La cercanía de
+ambos números, obtenidos de forma completamente independiente, respalda la validez
+del protocolo de evaluación seguido en este proyecto.
+
+\subsection{Ejemplo visual}
+
+La Figura~\ref{fig:comparativa} muestra, sobre una misma imagen de validación, las
+anotaciones reales (verde) frente a las predicciones de Hough tileado (azul) y de
+YOLOv8 (rojo): YOLO cubre casi la totalidad de los tanques reales, mientras que
+Hough solo detecta los tanques grandes y aislados, ignorando los clústeres densos.
+
+\begin{figure}[h!]
+\centering
+\includegraphics[width=0.75\textwidth]{compare_019822ed-bf5b-4cc7-b911-4ee529d8f28b.jpg}
+\caption{Comparativa cualitativa sobre una imagen de validación: anotación real
+(verde), Hough tileado (azul), YOLOv8 (rojo).}
+\label{fig:comparativa}
+\end{figure}
+
+\subsection{Líneas de mejora futuras}
+
+\begin{itemize}
+    \item \textbf{Señal de color real} en vez de solo brillo en escala de grises:
+    los métodos deterministas actuales solo distinguen ``claro vs.\ oscuro'';
+    incorporar el matiz/saturación (espacio HSV) podría separar tejados de tanque
+    de otras superficies brillantes (hormigón, tejados residenciales) que hoy
+    generan falsos positivos.
+    \item \textbf{Cajas circulares explícitas} en el detector de red neuronal,
+    siguiendo la propuesta de Wang et al.\ \cite{wang2025circular}, en vez de la
+    caja rectangular genérica de YOLO --- debería mejorar la precisión de
+    localización en tanques muy solapados.
+    \item \textbf{Ensemble de métodos deterministas} (unión con NMS de \emph{blob
+    detector} + \emph{watershed} universal): al usar lógicas de segmentación
+    distintas sobre la misma señal de brillo, podrían tener falsos positivos no
+    correlacionados y aciertos parcialmente complementarios.
+    \item \textbf{Ajuste fino del lado YOLO}, que quedó deliberadamente fuera de
+    alcance de este proyecto (se usó solo como referencia, no como objeto de
+    optimización): barrido de umbral de confianza/NMS en inferencia, modelos más
+    grandes (YOLOv8s/m), más épocas con aumentado de datos, o \emph{tiles} más
+    pequeños específicamente para mejorar el \emph{recall} en los clústeres más
+    densos.
+    \item \textbf{Ampliación del dataset de entrenamiento}: con solo 78 imágenes
+    de entrenamiento, un esquema de aprendizaje activo o la incorporación de más
+    imágenes anotadas de la colección completa de Airbus (este es solo un
+    subconjunto de demostración) sería la palanca más directa para seguir
+    mejorando el modelo de referencia.
+\end{itemize}
+
+% =============================================================================
+\section*{Anexo: reproducibilidad}
+% =============================================================================
+\addcontentsline{toc}{section}{Anexo: reproducibilidad}
+
+Todo el código fuente, comentado y organizado en módulos (\texttt{src/}) y
+\emph{scripts} ejecutables (\texttt{scripts/}), se entrega junto a esta memoria. La
+bitácora experimental completa --- cada configuración probada, su resultado y el
+razonamiento detrás de cada decisión --- está en el fichero \texttt{EXPERIMENTS.md}.
+Las métricas crudas de cada experimento están en \texttt{results/*.json} y las
+visualizaciones comparativas (anotación real vs.\ predicción) en
+\texttt{results/figures/}.
+
+% =============================================================================
+% Bibliografía
+% =============================================================================
+\begin{thebibliography}{99}
+
+\bibitem{duda1972hough}
+Duda, R.\,O. \& Hart, P.\,E. (1972).
+\emph{Use of the Hough Transformation to Detect Lines and Curves in Pictures}.
+Communications of the ACM. (Fundamento teórico de \texttt{cv2.HoughCircles}).
+
+\bibitem{faudi_yolox}
+Faudi, J. --- \emph{Oil Storage Detection on Airbus Imagery with YOLOX}.
+Medium / Artificialis.
+\url{https://medium.com/artificialis/oil-storage-detection-on-airbus-imagery-with-yolox-9e38eb6f7e62}
+Notebook asociado:
+\url{https://www.kaggle.com/code/jeffaudi/oil-storage-detection-on-airbus-imagery-with-yolox}
+
+\bibitem{ouzounis_maskrcnn}
+Ouzounis, G. --- \emph{Oil-Storage Tank Instance Segmentation with Mask R-CNN}.
+Medium.
+\url{https://medium.com/@georgios.ouzounis/oil-storage-tank-instance-segmentation-with-mask-r-cnn-77c94433045f}
+
+\bibitem{wang2025circular}
+Wang et al. (2025).
+\emph{Storage tank detection in remote sensing images based on circular bounding
+boxes and large selective kernel}. Scientific Reports.
+\url{https://www.nature.com/articles/s41598-025-27919-5}
+
+\bibitem{beucher1993watershed}
+Beucher, S. \& Meyer, F. (1993).
+\emph{The morphological approach to segmentation: the watershed transformation}.
+En \emph{Mathematical Morphology in Image Processing}, Marcel Dekker.
+(Fundamento teórico de \texttt{cv2.watershed}).
+
+\bibitem{lindeberg1998scale}
+Lindeberg, T. (1998).
+\emph{Feature Detection with Automatic Scale Selection}.
+International Journal of Computer Vision.
+(Fundamento teórico de la detección multiescala Laplaciano-de-Gaussiana/
+Diferencia-de-Gaussianas implementada en \texttt{skimage.feature.blob\_dog}).
+
+\bibitem{airbus_dataset}
+Airbus DS Intelligence / Scale AI --- \emph{Airbus Oil Storage Detection Dataset}.
+Kaggle. \url{https://www.kaggle.com/datasets/airbusgeo/airbus-oil-storage-detection-dataset}
+(Licencia CC BY-NC-SA 4.0).
+
+\bibitem{yolov8}
+Jocher, G., Chaurasia, A. \& Qiu, J. (2023).
+\emph{Ultralytics YOLOv8} [software].
+\url{https://github.com/ultralytics/ultralytics}
+
+\bibitem{bradski2000opencv}
+Bradski, G. (2000).
+\emph{The OpenCV Library}. Dr.\ Dobb's Journal of Software Tools.
+(\texttt{cv2.SimpleBlobDetector}, transformadas y operaciones morfológicas
+utilizadas en todo el proyecto).
+
+\bibitem{vanderwalt2014scikit}
+Van der Walt, S. et al. (2014).
+\emph{scikit-image: image processing in Python}. PeerJ.
+(\texttt{skimage.feature.peak\_local\_max}, \texttt{skimage.measure.regionprops},
+\texttt{skimage.feature.blob\_dog}).
+
+\end{thebibliography}
+
+\end{document}
