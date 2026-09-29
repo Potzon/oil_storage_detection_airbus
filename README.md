@@ -1,9 +1,9 @@
 # Detección de tanques de petróleo en imágenes satelitales
 
-**OpenCV clásico vs. YOLOv8** · Proyecto individual de *Fundamentos de la Visión por Computador*
+**OpenCV clásico vs. YOLOv8** · Proyecto de *Visión por Computador y Visión Artificial*
 
-Detección de tanques de almacenamiento de petróleo (círculos casi perfectos, agrupados en
-"granjas" de decenas o cientos de unidades) en imágenes de satélite de 2560×2560 px. El
+Detección de tanques de almacenamiento de petróleo (círculos agrupados en
+grupos) en imágenes de satélite de 2560×2560px. El
 proyecto compara **7 técnicas deterministas** (sin aprendizaje) frente a una **CNN
 fine-tuned (YOLOv8n)**, todas bajo exactamente el mismo protocolo de evaluación.
 
@@ -23,15 +23,15 @@ Evaluación sobre 20 imágenes de validación (IoU ≥ 0.5):
 | Blob detector + filtro de densidad | 0.626 | 0.248 | 0.355 | 0.428 s |
 | **YOLOv8n fine-tuned** | **0.812** | **0.876** | **0.843** | 0.373 s |
 
-**Conclusiones clave**
+**Conclusiones**
 
 - El techo del enfoque clásico está en **F1 ≈ 0.35**, menos de la mitad que YOLOv8n (0.843).
 - El cuello de botella es el **recall**, no la geometría: cuando un método clásico acierta,
   la caja es tan buena como la de la CNN (IoU medio 0.56–0.81).
-- **Elegir bien la técnica importa más que afinarla**: pasar de Hough a `SimpleBlobDetector`
+- **Elegir bien la técnica importa más que ajustarla**: pasar de Hough a `SimpleBlobDetector`
   duplicó el F1. Las técnicas que filtran por **polaridad de brillo** (tanques = objetos
   claros y compactos) superan con margen a las que solo miran bordes.
-- Un post-proceso barato (filtro por densidad de vecinos) **no rompe el techo**: los falsos
+- Un post-processing barato (filtro por densidad de vecinos) **no rompe el techo**: los falsos
   positivos también aparecen en grupo (naves industriales, urbanizaciones).
 
 ## Dataset
@@ -46,9 +46,6 @@ Evaluación sobre 20 imágenes de validación (IoU ≥ 0.5):
 | Anotaciones | 13 592 cajas, clase única `oil-storage-tank` |
 | Tanques por imagen | mín. 14 · mediana 99.5 · máx. 893 |
 | Lado de la caja | mín. 3 px · mediana 18 px · máx. 108 px |
-
-El dataset **no se incluye** en el repositorio; descárgalo de Kaggle y colócalo en
-`airbus_oil_storage_detection/`.
 
 ## Protocolo de evaluación
 
@@ -65,7 +62,6 @@ Común a todos los métodos, para que la comparación sea honesta:
 
 ```
 .
-├── airbus_oil_storage_detection/   # dataset original (imágenes + annotations.csv)
 ├── src/
 │   ├── dataset.py                  # parseo de anotaciones, split train/val, I/O de imagen
 │   ├── evaluate.py                 # IoU, matching greedy, métricas P/R/F1, NMS
@@ -119,46 +115,6 @@ Librerías principales:
 ```bash
 pip install opencv-python numpy pandas scipy scikit-image matplotlib ultralytics
 ```
-
-## Uso
-
-Los scripts se ejecutan desde la raíz del proyecto. Orden sugerido para reproducir los
-resultados:
-
-```bash
-# Métodos deterministas
-python scripts/run_hough.py
-python scripts/experiment_classic.py
-python scripts/refine_blob.py
-python scripts/experiment_classic2.py
-python scripts/experiment_density_filter.py
-
-# Referencia CNN
-python scripts/train_yolo.py
-python scripts/run_yolo.py
-
-# Tabla comparativa y figuras
-python scripts/compare.py
-```
-
-Las métricas crudas quedan en `results/*.json` y las visualizaciones en `results/figures/`.
-
-## Documentación
-
-- [`MEMORIA.md`](MEMORIA.md) — memoria completa: problema, estado del arte, metodología,
-  resultados, líneas futuras y bibliografía.
-- [`EXPERIMENTS.md`](EXPERIMENTS.md) — bitácora experimento a experimento, incluido un bug
-  real de diseño en el watershed universal (fondo sin marcar → 99.97 % de regiones de 1 px).
-
-## Líneas de mejora
-
-- Usar **color real** (HSV) en vez de solo brillo en escala de grises.
-- **Cajas circulares** explícitas en la red neuronal (Wang et al., 2025).
-- **Ensemble** de blob detector + watershed universal con NMS.
-- Ajuste fino del lado YOLO: umbral de confianza/NMS, modelos mayores, más épocas, tiles
-  más pequeños.
-- Ampliar el dataset de entrenamiento (solo hay 78 imágenes de train).
-
 ## Referencias principales
 
 - Faudi, J. — *Oil Storage Detection on Airbus Imagery with YOLOX* (AP@0.5 = 0.856).
@@ -167,9 +123,6 @@ Las métricas crudas quedan en `results/*.json` y las visualizaciones en `result
   bounding boxes and large selective kernel*, Scientific Reports.
 - Jocher, Chaurasia & Qiu (2023) — *Ultralytics YOLOv8*.
 
-Bibliografía completa en la sección 4 de [`MEMORIA.md`](MEMORIA.md).
-
 ## Licencia
 
-El dataset se distribuye bajo **CC BY-NC-SA 4.0** (uso no comercial). Añade aquí la licencia
-del código si corresponde.
+El dataset se distribuye bajo **CC BY-NC-SA 4.0** (uso no comercial). 
